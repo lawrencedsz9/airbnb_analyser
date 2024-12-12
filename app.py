@@ -8,6 +8,8 @@ from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from streamlit_folium import st_folium
+from statsmodels.tsa.seasonal import seasonal_decompose
+import matplotlib.dates as mdates
 
 # Title
 st.title("Airbnb Listings Analysis")
@@ -21,7 +23,7 @@ if uploaded_file:
     data['last_review'] = pd.to_datetime(data['last_review'], errors='coerce')
     data['price'].fillna(data['price'].median(), inplace=True)
     data['reviews_per_month'].fillna(0, inplace=True)
-    data_cleaned = data.drop(columns=['license'])
+    data_cleaned = data.drop(columns=['license'], errors='ignore')
 
     # EDA
     st.subheader("Exploratory Data Analysis")
@@ -72,3 +74,35 @@ if uploaded_file:
     if st.button("Export Results"):
         feature_importances.to_csv('feature_importances.csv', index=False)
         st.write("Feature importance exported to 'feature_importances.csv'")
+
+    # Time-Series Analysis
+    if 'last_review' in data_cleaned.columns:
+        st.subheader("Time-Series Analysis: Price Trends")
+
+        # Filter and Resample Data for Time-Series Analysis
+        time_series_data = data_cleaned[['last_review', 'price']].dropna()
+        time_series_data = time_series_data.sort_values(by='last_review')
+        time_series_data = time_series_data.set_index('last_review')
+        time_series_data = time_series_data.resample('M').mean()
+        time_series_data['price'] = time_series_data['price'].interpolate(method='linear')  # Handle missing values
+
+        # Plot Time-Series Data
+        st.write("**Monthly Average Prices**")
+        fig, ax = plt.subplots(figsize=(12, 6))
+        ax.plot(time_series_data.index, time_series_data['price'], marker='o', linestyle='-', label='Price')
+        ax.set_title('Monthly Average Price Trends', fontsize=16)
+        ax.set_xlabel('Date', fontsize=12)
+        ax.set_ylabel('Price', fontsize=12)
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%b %Y'))
+        plt.xticks(rotation=45)
+        st.pyplot(fig)
+
+        # Seasonal Decomposition
+        st.write("**Seasonal Decomposition**")
+        decomposition = seasonal_decompose(time_series_data['price'], model='additive', period=12)
+        fig, axes = plt.subplots(3, 1, figsize=(12, 10), sharex=True)
+        decomposition.trend.plot(ax=axes[0], title='Trend', color='blue')
+        decomposition.seasonal.plot(ax=axes[1], title='Seasonal', color='green')
+        decomposition.resid.plot(ax=axes[2], title='Residual', color='red')
+        plt.xlabel('Date')
+        st.pyplot(fig)
