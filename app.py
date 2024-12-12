@@ -12,11 +12,13 @@ from statsmodels.tsa.seasonal import seasonal_decompose
 import matplotlib.dates as mdates
 
 # Title
-st.title("Airbnb Listings Analysis")
+st.title("Airbnb Listings: Analysis and Price Prediction")
 
 # File Upload
 uploaded_file = st.file_uploader("Upload a CSV file", type="csv")
+
 if uploaded_file:
+    # Load Dataset
     data = pd.read_csv(uploaded_file)
 
     # Data Cleaning
@@ -24,6 +26,10 @@ if uploaded_file:
     data['price'].fillna(data['price'].median(), inplace=True)
     data['reviews_per_month'].fillna(0, inplace=True)
     data_cleaned = data.drop(columns=['license'], errors='ignore')
+
+    # Display Dataset
+    st.subheader("Dataset Overview")
+    st.write(data_cleaned.head())
 
     # EDA
     st.subheader("Exploratory Data Analysis")
@@ -35,7 +41,7 @@ if uploaded_file:
     sns.histplot(data_cleaned['price'], bins=50, kde=True, color='blue', ax=ax)
     st.pyplot(fig)
 
-    # Map
+    # Map Visualization
     st.subheader("Listings Map")
     map_center = [data_cleaned['latitude'].mean(), data_cleaned['longitude'].mean()]
     map_airbnb = folium.Map(location=map_center, zoom_start=12)
@@ -45,20 +51,20 @@ if uploaded_file:
                       popup=f"Price: ${row['price']}\nRoom Type: {row['room_type']}\nNeighborhood: {row['neighbourhood']}").add_to(marker_cluster)
     st_folium(map_airbnb, width=800, height=500)
 
-    # Model Training and Evaluation
+    # Predictive Modeling
     st.subheader("Predictive Modeling")
     features = ['minimum_nights', 'number_of_reviews', 'reviews_per_month', 'availability_365']
     X = data_cleaned[features]
     y = data_cleaned['price']
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-    model = RandomForestRegressor(n_estimators=100, random_state=42, n_jobs=-1)
+    model = RandomForestRegressor(n_estimators=100, random_state=42)
     model.fit(X_train, y_train)
-    y_pred = model.predict(X_test)
 
+    # Model Evaluation
+    y_pred = model.predict(X_test)
     mae = mean_absolute_error(y_test, y_pred)
     mse = mean_squared_error(y_test, y_pred)
     r2 = r2_score(y_test, y_pred)
-
     st.write(f"**Mean Absolute Error (MAE):** {mae}")
     st.write(f"**Mean Squared Error (MSE):** {mse}")
     st.write(f"**R-squared (R²):** {r2}")
@@ -70,23 +76,30 @@ if uploaded_file:
     sns.barplot(data=feature_importances, x='Importance', y='Feature', palette='viridis', ax=ax)
     st.pyplot(fig)
 
-    # Export Results
-    if st.button("Export Results"):
-        feature_importances.to_csv('feature_importances.csv', index=False)
-        st.write("Feature importance exported to 'feature_importances.csv'")
+    # Price Prediction
+    st.subheader("Price Prediction")
+    st.write("Enter the feature values to predict the price:")
+
+    input_data = {}
+    for feature in features:
+        input_data[feature] = st.number_input(f"Enter value for {feature}", value=0.0)
+
+    input_df = pd.DataFrame([input_data])
+
+    if st.button("Predict Price"):
+        predicted_price = model.predict(input_df)
+        st.write(f"**Predicted Price:** ${predicted_price[0]:.2f}")
 
     # Time-Series Analysis
     if 'last_review' in data_cleaned.columns:
         st.subheader("Time-Series Analysis: Price Trends")
-
-        # Filter and Resample Data for Time-Series Analysis
         time_series_data = data_cleaned[['last_review', 'price']].dropna()
         time_series_data = time_series_data.sort_values(by='last_review')
         time_series_data = time_series_data.set_index('last_review')
         time_series_data = time_series_data.resample('M').mean()
-        time_series_data['price'] = time_series_data['price'].interpolate(method='linear')  # Handle missing values
+        time_series_data['price'] = time_series_data['price'].interpolate(method='linear')
 
-        # Plot Time-Series Data
+        # Monthly Price Trends
         st.write("**Monthly Average Prices**")
         fig, ax = plt.subplots(figsize=(12, 6))
         ax.plot(time_series_data.index, time_series_data['price'], marker='o', linestyle='-', label='Price')
